@@ -6,7 +6,7 @@ max_input_len: 100
 max_output_len: 20
 
 batch_size: 128
-epochs: 2
+epochs: 100
 emb_size: 512
 lstm_units: 512
 loss: 'sparse_categorical_crossentropy'

@@ -41,7 +41,7 @@ print("Transformed training data")
 
 # Creates and trains the model
 build_model = BuildModel(config, params)
-code2doc_train = build_model.run(enc_input[:10], dec_input[:10], dec_output[:10], vocabs)
+code2doc_train = build_model.run(enc_input, dec_input, dec_output, vocabs)
 print("Model trained")
 
 # Evaluates model
