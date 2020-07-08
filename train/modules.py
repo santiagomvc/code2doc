@@ -157,6 +157,7 @@ class TransformText:
 
         # Extracting training sets
         code_train, doc_train = training_sets['X_train'], training_sets['Y_train']
+        code_valid, doc_valid = training_sets['X_valid'], training_sets['Y_valid']
 
         # Creating vocabulary
         (code_idx2tkn, code_tkn2idx) = create_vocab(code_train)
@@ -168,10 +169,15 @@ class TransformText:
 
         # indexing and padding the sequences
         X_train, Y_train = transform_examples(code_train, doc_train, code_params, doc_params)
+        X_valid, Y_valid = transform_examples(code_valid, doc_valid, code_params, doc_params)
 
-        enc_input = X_train 
-        dec_input = Y_train[:,:-1]
-        dec_output = Y_train[:,1:]
+        # Creating a dictionary with the training data
+        training_input = {
+            'X_train': X_train, 
+            'Y_train': Y_train, 
+            'X_valid': X_valid, 
+            'Y_valid': Y_valid
+        }
 
         # Creating a dictionary with all the vocabs
         vocabs = {
@@ -182,7 +188,7 @@ class TransformText:
         }
 
         # Return X_train and Y_train 
-        return(enc_input, dec_input, dec_output, vocabs)
+        return(training_input, vocabs)
 
 
 class BuildModel:
@@ -191,7 +197,11 @@ class BuildModel:
         self.config = config
         self.params = params
 
-    def run(self, enc_input, dec_input, dec_output, vocabs):
+    def run(self, training_input, vocabs):
+        # Importing required libraries
+        from datetime import datetime
+        from tensorflow import keras
+
         # Extracting needed params
         loss = self.params['loss']
         optimizer = self.params['optimizer']
@@ -200,15 +210,34 @@ class BuildModel:
         epochs = self.params['epochs']
         model_save_dir = self.config['PATHS']['trainings_dir']
         model_save_file = self.config['FILES']['model_file']
+        model_save_logs = self.config['PATHS']['trainings_log_dir']
 
         # Creating folder to save model if it doesn't exists
         os.makedirs(model_save_dir, exist_ok=True)
         
+        # Extracting training input
+        X_train, Y_train = training_input['X_train'], training_input['Y_train']
+        X_valid, Y_valid = training_input['X_valid'], training_input['Y_valid']
+
+        # definign inputs for training data
+        enc_input_train = X_train 
+        dec_input_train = Y_train[:,:-1]
+        dec_output_train = Y_train[:,1:]
+
+        # definign inputs for validation data
+        enc_input_valid = X_valid 
+        dec_input_valid = Y_valid[:,:-1]
+        dec_output_valid = Y_valid[:,1:]
+
         # Extracting needed data
-        _, enc_dim = enc_input.shape
-        _, dec_dim = dec_input.shape
+        _, enc_dim = enc_input_train.shape
+        _, dec_dim = dec_input_train.shape
         enc_vocab_size = len(vocabs['code_t2i'].keys())
         dec_vocab_size = len(vocabs['doc_t2i'].keys())
+
+        # Defining keras logging callback
+        logdir = model_save_logs + '/' + datetime.now().strftime("%Y%m%d-%H%M%S")
+        tensorboard_callback = keras.callbacks.TensorBoard(log_dir=logdir)
         
         # Creating the model class
         code2doc = Code2DocTrain(enc_dim, dec_dim, enc_vocab_size, dec_vocab_size)
@@ -217,56 +246,59 @@ class BuildModel:
         # Defining hyperparameters for the model
         model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
         # Fitting the model to the data
-        model.fit([enc_input, dec_input], dec_output, batch_size=batch_size, epochs=epochs) 
+        model.fit([enc_input_train, dec_input_train], dec_output_train, 
+                    batch_size=batch_size, epochs=epochs,
+                    validation_data=([enc_input_valid, dec_input_valid], dec_output_valid),
+                    callbacks=[tensorboard_callback]) 
         #Saving the model
         model.save(model_save_file)
         
         return(model)
 
 
-class EvalModel:
-    def __init__(self, config, params):
-        super().__init__()
-        self.config = config
-        self.params = params
+# class EvalModel:
+#     def __init__(self, config, params):
+#         super().__init__()
+#         self.config = config
+#         self.params = params
 
-    def run(self, model, training_sets, vocabs):
+#     def run(self, model, training_sets, vocabs):
         
-        # Extracting parameters
-        min_input_len = self.params['min_input_len']
-        min_output_len = self.params['min_output_len']
-        max_input_len = self.params['max_input_len']
-        max_output_len = self.params['max_output_len']
-        score_save_dir = self.config['PATHS']['trainings_dir']
-        score_save_file = self.config['FILES']['model_score']
+#         # Extracting parameters
+#         min_input_len = self.params['min_input_len']
+#         min_output_len = self.params['min_output_len']
+#         max_input_len = self.params['max_input_len']
+#         max_output_len = self.params['max_output_len']
+#         score_save_dir = self.config['PATHS']['trainings_dir']
+#         score_save_file = self.config['FILES']['model_score']
 
-        # Creating folder to save score if it doesn't exists
-        os.makedirs(score_save_dir, exist_ok=True)
+#         # Creating folder to save score if it doesn't exists
+#         os.makedirs(score_save_dir, exist_ok=True)
 
-        # getting dictionaries with vocabulary
-        code_tkn2idx = vocabs['code_t2i']
-        doc_tkn2idx = vocabs['doc_t2i']
+#         # getting dictionaries with vocabulary
+#         code_tkn2idx = vocabs['code_t2i']
+#         doc_tkn2idx = vocabs['doc_t2i']
 
-        # defining parameters for transforming examples
-        code_params = {'tkn2idx': code_tkn2idx, 'min_len': min_input_len, 'max_len': max_input_len}
-        doc_params = {'tkn2idx': doc_tkn2idx, 'min_len': min_output_len, 'max_len': max_output_len}
+#         # defining parameters for transforming examples
+#         code_params = {'tkn2idx': code_tkn2idx, 'min_len': min_input_len, 'max_len': max_input_len}
+#         doc_params = {'tkn2idx': doc_tkn2idx, 'min_len': min_output_len, 'max_len': max_output_len}
 
-        # Extracting eval data
-        code_val, doc_val = training_sets['X_valid'], training_sets['Y_valid']
+#         # Extracting eval data
+#         code_val, doc_val = training_sets['X_valid'], training_sets['Y_valid']
 
-        # indexing and padding the sequences
-        X_valid, Y_valid = transform_examples(code_val, doc_val, code_params, doc_params)
+#         # indexing and padding the sequences
+#         X_valid, Y_valid = transform_examples(code_val, doc_val, code_params, doc_params)
 
-        # Defining inputs and outputs
-        enc_input = X_valid 
-        dec_input = Y_valid[:,:-1]
-        dec_output = Y_valid[:,1:]
+#         # Defining inputs and outputs
+#         enc_input = X_valid 
+#         dec_input = Y_valid[:,:-1]
+#         dec_output = Y_valid[:,1:]
 
-        # evaluating model performance
-        score = model.evaluate([enc_input, dec_input], dec_output)
+#         # evaluating model performance
+#         score = model.evaluate([enc_input, dec_input], dec_output)
         
-        # Saving model performance
-        with open(score_save_file, 'w') as f:
-            print(score, file=f)
+#         # Saving model performance
+#         with open(score_save_file, 'w') as f:
+#             print(score, file=f)
 
-        return(score)
+#         return(score)

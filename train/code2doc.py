@@ -6,7 +6,7 @@ import torch
 import torchtext
 from configparser import ConfigParser, ExtendedInterpolation
 from modules import ReadParams, DownloadData, ReadData, PrepareData
-from modules import TransformText, BuildModel, EvalModel
+from modules import TransformText, BuildModel
 print("Libraries loaded")
 
 # Reading config
@@ -36,19 +36,18 @@ print("Training pairs generated")
 
 # Generates vocabs and transforms data for training
 transform_text = TransformText(config, params)
-(enc_input, dec_input, dec_output, vocabs) = transform_text.run(training_sets)
+(training_input, vocabs) = transform_text.run(training_sets)
 print("Transformed training data")
 
 # Creates and trains the model
 build_model = BuildModel(config, params)
-code2doc_train = build_model.run(enc_input, dec_input, dec_output, vocabs)
+code2doc_train = build_model.run(training_input, vocabs)
 print("Model trained")
 
-# Evaluates model
-eval_model = EvalModel(config, params)
-model_score = eval_model.run(code2doc_train, training_sets, vocabs)
-print("Model scored on validation data")
-
+# # Evaluates model
+# eval_model = EvalModel(config, params)
+# model_score = eval_model.run(code2doc_train, training_sets, vocabs)
+# print("Model scored on validation data")
 
 # test model inference
 # from utils.code2doc_utils import Code2DocInfer
